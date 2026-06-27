@@ -1,0 +1,3 @@
+[runtime]
+default_ctx = 4096
+default_gpu_layers = 30
