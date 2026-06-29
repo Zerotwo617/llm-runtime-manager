@@ -55,4 +55,25 @@ jobs:
         run: exit 1
 
       - name: Build Tauri app
-        run: npm run tauri:build
+        id: tauri-build
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          npm run tauri:build 2>&1 | Tee-Object tauri-build.log
+          if ($LASTEXITCODE -ne 0) {
+            $tail = (Get-Content tauri-build.log -Tail 80) -join "`n"
+            $escaped = $tail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=Tauri build failed::$escaped"
+            exit $LASTEXITCODE
+          }
+
+      - name: Upload Tauri build log
+        if: steps.tauri-build.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-build-log
+          path: tauri-build.log
+
+      - name: Fail after Tauri build
+        if: steps.tauri-build.outcome == 'failure'
+        run: exit 1
