@@ -16,10 +16,17 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
 body {
   margin: 0;
   min-width: 1080px;
   min-height: 720px;
+  overflow: hidden;
 }
 
 button,
@@ -85,23 +92,48 @@ pre {
 .app-shell {
   display: grid;
   grid-template-columns: 236px minmax(0, 1fr);
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: #eef2f7;
 }
 
 .sidebar {
+  position: sticky;
+  top: 0;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   gap: 28px;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
   border-right: 1px solid #d8e0ec;
   background: #f8fafc;
   padding: 24px 18px;
 }
 
+.sidebar-main {
+  min-height: 0;
+}
+
+.brand-block {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  object-fit: cover;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.16);
+}
+
 .brand {
   color: #101828;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   line-height: 1.2;
 }
@@ -118,14 +150,24 @@ nav {
   margin-top: 28px;
 }
 
-nav a {
+.nav-item {
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 42px;
+  border: 0;
   border-radius: 8px;
+  background: transparent;
   color: #596579;
   padding: 10px 12px;
   text-decoration: none;
 }
 
-nav a.active {
+.nav-item:hover {
+  background: #f1f5f9;
+  border-color: transparent;
+}
+
+.nav-item.active {
   background: #e8f0ff;
   color: #1d4ed8;
   font-weight: 600;
@@ -157,6 +199,8 @@ nav a.active {
 .workspace {
   position: relative;
   min-width: 0;
+  height: 100vh;
+  overflow-y: auto;
   padding: 24px;
 }
 
@@ -184,6 +228,10 @@ nav a.active {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+}
+
+.module-grid {
+  padding-bottom: 32px;
 }
 
 .panel {
@@ -334,6 +382,11 @@ nav a.active {
   display: grid;
   gap: 6px;
   height: 190px;
+}
+
+.log-view.tall {
+  height: min(520px, calc(100vh - 280px));
+  min-height: 280px;
 }
 
 .log-view span {

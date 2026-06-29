@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { normalizeDeviceProfile, normalizeModelFile, normalizeModelFiles } from "./api";
+import logoUrl from "./assets/logo.png";
 import type {
   AppSettings,
   DeviceProfile,
@@ -41,8 +42,37 @@ const profileLabels: Record<LaunchProfile, string> = {
   custom: "自定义",
 };
 
+type SectionId = "launch" | "models" | "hardware" | "logs";
+
+const sections: Array<{ id: SectionId; label: string }> = [
+  { id: "launch", label: "启动" },
+  { id: "models", label: "模型" },
+  { id: "hardware", label: "硬件" },
+  { id: "logs", label: "日志" },
+];
+
+const sectionCopy: Record<SectionId, { title: string; description: string }> = {
+  launch: {
+    title: "启动配置",
+    description: "生成可编辑的 llama-server 参数，确认命令后启动或停止服务。",
+  },
+  models: {
+    title: "模型管理",
+    description: "扫描模型目录，选择主模型，并为多模态模型绑定 mmproj。",
+  },
+  hardware: {
+    title: "硬件画像",
+    description: "读取当前电脑的 CPU、内存和 GPU 信息，作为推荐参数的约束。",
+  },
+  logs: {
+    title: "运行日志",
+    description: "查看 llama-server 的运行状态和最近输出。",
+  },
+};
+
 export default function App() {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
+  const [activeSection, setActiveSection] = useState<SectionId>("launch");
   const [device, setDevice] = useState<DeviceProfile | null>(null);
   const [models, setModels] = useState<ModelFile[]>([]);
   const [selectedModelPath, setSelectedModelPath] = useState("");
@@ -61,6 +91,7 @@ export default function App() {
   );
   const launchableModels = models.filter((model) => !model.isMmproj);
   const mmprojModels = models.filter((model) => model.isMmproj);
+  const activeCopy = sectionCopy[activeSection];
 
   useEffect(() => {
     void boot();
@@ -251,16 +282,26 @@ export default function App() {
   return (
     <main className="app-shell">
       <aside className="sidebar">
-        <div>
-          <div className="brand">LLM Runtime Manager</div>
-          <div className="subtitle">模型能力适配启动器</div>
+        <div className="sidebar-main">
+          <div className="brand-block">
+            <img className="brand-logo" src={logoUrl} alt="LlamaCPP Launcher" />
+            <div>
+              <div className="brand">LlamaCPP Launcher</div>
+              <div className="subtitle">模型能力适配启动器</div>
+            </div>
+          </div>
+          <nav>
+            {sections.map((section) => (
+              <button
+                key={section.id}
+                className={section.id === activeSection ? "nav-item active" : "nav-item"}
+                onClick={() => setActiveSection(section.id)}
+              >
+                {section.label}
+              </button>
+            ))}
+          </nav>
         </div>
-        <nav>
-          <a className="active">启动</a>
-          <a>模型</a>
-          <a>硬件</a>
-          <a>日志</a>
-        </nav>
         <div className={status.running ? "status running" : "status"}>
           <span>{status.running ? "运行中" : "空闲"}</span>
           <small>{status.message}</small>
@@ -270,8 +311,8 @@ export default function App() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <h1>第一个版本</h1>
-            <p>选择模型，读取硬件，生成可编辑的 llama-server 启动命令。</p>
+            <h1>{activeCopy.title}</h1>
+            <p>{activeCopy.description}</p>
           </div>
           <button className="icon-button" onClick={() => void saveCurrentSettings()}>
             <Save size={18} />
@@ -279,169 +320,210 @@ export default function App() {
           </button>
         </header>
 
-        <section className="grid">
-          <Panel title="运行环境" icon={<Server size={18} />}>
-            <label>
-              llama-server.exe
-              <div className="path-row">
-                <input value={settings.serverPath} onChange={(event) => setSettings({ ...settings, serverPath: event.target.value })} />
-                <button onClick={() => void pickServer()}>选择</button>
-              </div>
-            </label>
-            <div className="actions">
-              <button onClick={() => void addModelDirectory()}>
-                <FolderPlus size={16} />
-                添加模型目录
-              </button>
-              <button onClick={() => void pickModelFile()}>直接选模型</button>
-              <button onClick={() => void scanModels()}>
-                <RefreshCcw size={16} />
-                扫描
-              </button>
-            </div>
-            <div className="directory-list">
-              {settings.modelDirectories.map((directory) => (
-                <span key={directory}>{directory}</span>
-              ))}
-            </div>
-          </Panel>
-
-          <Panel title="硬件画像" icon={<Cpu size={18} />}>
-            <button onClick={() => void refreshDevice()}>
-              <RefreshCcw size={16} />
-              重新检测
-            </button>
-            {device ? (
-              <div className="hardware">
-                <Metric label="CPU 线程" value={`${device.cpuLogicalThreads}`} />
-                <Metric label="总内存" value={`${formatGb(device.totalRamMb)} GB`} />
-                <Metric label="可用内存" value={`${formatGb(device.availableRamMb)} GB`} />
-                <Metric
-                  label="GPU"
-                  value={
-                    device.gpus[0]
-                      ? `${device.gpus[0].name} / ${formatGb(device.gpus[0].totalVramMb)} GB`
-                      : "CPU fallback"
-                  }
-                />
-                {device.notes.map((note) => (
-                  <p className="note" key={note}>{note}</p>
-                ))}
-              </div>
-            ) : (
-              <p className="muted">尚未检测。</p>
-            )}
-          </Panel>
-
-          <Panel title="模型选择" icon={<Gauge size={18} />} wide>
-            <div className="split">
+        {activeSection === "launch" && (
+          <section className="grid module-grid">
+            <Panel title="运行环境" icon={<Server size={18} />} wide>
               <label>
-                主模型
-                <select value={selectedModelPath} onChange={(event) => setSelectedModelPath(event.target.value)}>
-                  <option value="">请选择模型</option>
-                  {launchableModels.map((model) => (
-                    <option key={model.path} value={model.path}>
-                      {model.name} ({model.sizeMb || "未知"} MB)
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                mmproj
+                llama-server.exe
                 <div className="path-row">
-                  <select value={mmprojPath} onChange={(event) => setMmprojPath(event.target.value)}>
-                    <option value="">不使用</option>
-                    {mmprojModels.map((model) => (
-                      <option key={model.path} value={model.path}>{model.name}</option>
-                    ))}
-                  </select>
-                  <button onClick={() => void pickMmprojFile()}>选择</button>
+                  <input value={settings.serverPath} onChange={(event) => setSettings({ ...settings, serverPath: event.target.value })} />
+                  <button onClick={() => void pickServer()}>选择</button>
                 </div>
               </label>
-            </div>
-            <div className="model-path">{selectedModel?.path ?? "未选择模型"}</div>
-          </Panel>
+            </Panel>
 
-          <Panel title="参数推荐" icon={<Terminal size={18} />} wide>
-            <div className="split compact">
+            <Panel title="参数推荐" icon={<Terminal size={18} />} wide>
+              <div className="split compact">
+                <label>
+                  目标模式
+                  <select
+                    value={settings.profile}
+                    onChange={(event) => setSettings({ ...settings, profile: event.target.value as LaunchProfile })}
+                  >
+                    {Object.entries(profileLabels).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Host
+                  <input value={settings.host} onChange={(event) => setSettings({ ...settings, host: event.target.value })} />
+                </label>
+                <label>
+                  Port
+                  <input
+                    type="number"
+                    value={settings.port}
+                    onChange={(event) => setSettings({ ...settings, port: Number(event.target.value) })}
+                  />
+                </label>
+              </div>
               <label>
-                目标模式
-                <select
-                  value={settings.profile}
-                  onChange={(event) => setSettings({ ...settings, profile: event.target.value as LaunchProfile })}
-                >
-                  {Object.entries(profileLabels).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
+                额外参数
+                <input value={extraArgs} onChange={(event) => setExtraArgs(event.target.value)} placeholder="例如 --no-webui" />
+              </label>
+              <button className="primary" onClick={() => void generateRecommendation()}>
+                生成推荐参数
+              </button>
+
+              {editableParams && (
+                <div className="param-grid">
+                  <NumberField label="Context" value={editableParams.contextSize} onChange={(value) => updateParam("contextSize", value)} />
+                  <NumberField label="GPU Layers" value={editableParams.gpuLayers} onChange={(value) => updateParam("gpuLayers", value)} />
+                  <NumberField label="Threads" value={editableParams.threads} onChange={(value) => updateParam("threads", value)} />
+                  <NumberField label="Batch" value={editableParams.batchSize} onChange={(value) => updateParam("batchSize", value)} />
+                  <NumberField label="UBatch" value={editableParams.ubatchSize} onChange={(value) => updateParam("ubatchSize", value)} />
+                  <NumberField label="Parallel" value={editableParams.parallel} onChange={(value) => updateParam("parallel", value)} />
+                </div>
+              )}
+
+              {recommendation && (
+                <div className="explanations">
+                  {recommendation.explanations.map((item) => (
+                    <p key={item}>{item}</p>
                   ))}
-                </select>
-              </label>
-              <label>
-                Host
-                <input value={settings.host} onChange={(event) => setSettings({ ...settings, host: event.target.value })} />
-              </label>
-              <label>
-                Port
-                <input
-                  type="number"
-                  value={settings.port}
-                  onChange={(event) => setSettings({ ...settings, port: Number(event.target.value) })}
-                />
-              </label>
-            </div>
-            <label>
-              额外参数
-              <input value={extraArgs} onChange={(event) => setExtraArgs(event.target.value)} placeholder="例如 --no-webui" />
-            </label>
-            <button className="primary" onClick={() => void generateRecommendation()}>
-              生成推荐参数
-            </button>
+                </div>
+              )}
+            </Panel>
 
-            {editableParams && (
-              <div className="param-grid">
-                <NumberField label="Context" value={editableParams.contextSize} onChange={(value) => updateParam("contextSize", value)} />
-                <NumberField label="GPU Layers" value={editableParams.gpuLayers} onChange={(value) => updateParam("gpuLayers", value)} />
-                <NumberField label="Threads" value={editableParams.threads} onChange={(value) => updateParam("threads", value)} />
-                <NumberField label="Batch" value={editableParams.batchSize} onChange={(value) => updateParam("batchSize", value)} />
-                <NumberField label="UBatch" value={editableParams.ubatchSize} onChange={(value) => updateParam("ubatchSize", value)} />
-                <NumberField label="Parallel" value={editableParams.parallel} onChange={(value) => updateParam("parallel", value)} />
+            <Panel title="命令与运行" icon={<Play size={18} />} wide>
+              <pre className="command-preview">
+                {editableParams ? commandPreview : "生成推荐参数后显示完整命令"}
+              </pre>
+              <div className="actions">
+                <button className="primary" disabled={status.running} onClick={() => void startServer()}>
+                  <Play size={16} />
+                  启动
+                </button>
+                <button disabled={!status.running} onClick={() => void stopServer()}>
+                  <Square size={16} />
+                  停止
+                </button>
+                <button onClick={() => void refreshLogs()}>
+                  <RefreshCcw size={16} />
+                  刷新日志
+                </button>
               </div>
-            )}
+            </Panel>
+          </section>
+        )}
 
-            {recommendation && (
-              <div className="explanations">
-                {recommendation.explanations.map((item) => (
-                  <p key={item}>{item}</p>
-                ))}
+        {activeSection === "models" && (
+          <section className="grid module-grid">
+            <Panel title="模型目录" icon={<FolderPlus size={18} />} wide>
+              <div className="actions">
+                <button onClick={() => void addModelDirectory()}>
+                  <FolderPlus size={16} />
+                  添加模型目录
+                </button>
+                <button onClick={() => void pickModelFile()}>直接选模型</button>
+                <button onClick={() => void scanModels()}>
+                  <RefreshCcw size={16} />
+                  扫描
+                </button>
               </div>
-            )}
-          </Panel>
+              <div className="directory-list">
+                {settings.modelDirectories.length === 0 ? (
+                  <span>尚未添加模型目录</span>
+                ) : (
+                  settings.modelDirectories.map((directory) => (
+                    <span key={directory}>{directory}</span>
+                  ))
+                )}
+              </div>
+            </Panel>
 
-          <Panel title="命令与运行" icon={<Play size={18} />} wide>
-            <pre className="command-preview">
-              {editableParams ? commandPreview : "生成推荐参数后显示完整命令"}
-            </pre>
-            <div className="actions">
-              <button className="primary" disabled={status.running} onClick={() => void startServer()}>
-                <Play size={16} />
-                启动
+            <Panel title="模型选择" icon={<Gauge size={18} />} wide>
+              <div className="split">
+                <label>
+                  主模型
+                  <select value={selectedModelPath} onChange={(event) => setSelectedModelPath(event.target.value)}>
+                    <option value="">请选择模型</option>
+                    {launchableModels.map((model) => (
+                      <option key={model.path} value={model.path}>
+                        {model.name} ({model.sizeMb || "未知"} MB)
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  mmproj
+                  <div className="path-row">
+                    <select value={mmprojPath} onChange={(event) => setMmprojPath(event.target.value)}>
+                      <option value="">不使用</option>
+                      {mmprojModels.map((model) => (
+                        <option key={model.path} value={model.path}>{model.name}</option>
+                      ))}
+                    </select>
+                    <button onClick={() => void pickMmprojFile()}>选择</button>
+                  </div>
+                </label>
+              </div>
+              <div className="model-path">{selectedModel?.path ?? "未选择模型"}</div>
+            </Panel>
+          </section>
+        )}
+
+        {activeSection === "hardware" && (
+          <section className="grid module-grid">
+            <Panel title="硬件画像" icon={<Cpu size={18} />} wide>
+              <button onClick={() => void refreshDevice()}>
+                <RefreshCcw size={16} />
+                重新检测
               </button>
-              <button disabled={!status.running} onClick={() => void stopServer()}>
-                <Square size={16} />
-                停止
-              </button>
+              {device ? (
+                <div className="hardware">
+                  <Metric label="CPU 线程" value={`${device.cpuLogicalThreads}`} />
+                  <Metric label="总内存" value={`${formatGb(device.totalRamMb)} GB`} />
+                  <Metric label="可用内存" value={`${formatGb(device.availableRamMb)} GB`} />
+                  <Metric
+                    label="GPU"
+                    value={
+                      device.gpus[0]
+                        ? `${device.gpus[0].name} / ${formatGb(device.gpus[0].totalVramMb)} GB`
+                        : "CPU fallback"
+                    }
+                  />
+                  {device.notes.map((note) => (
+                    <p className="note" key={note}>{note}</p>
+                  ))}
+                </div>
+              ) : (
+                <p className="muted">尚未检测。</p>
+              )}
+            </Panel>
+          </section>
+        )}
+
+        {activeSection === "logs" && (
+          <section className="grid module-grid">
+            <Panel title="运行控制" icon={<Play size={18} />} wide>
+              <div className="actions">
+                <button className="primary" disabled={status.running} onClick={() => void startServer()}>
+                  <Play size={16} />
+                  启动
+                </button>
+                <button disabled={!status.running} onClick={() => void stopServer()}>
+                  <Square size={16} />
+                  停止
+                </button>
+                <button onClick={() => void refreshStatus()}>
+                  <RefreshCcw size={16} />
+                  刷新状态
+                </button>
+              </div>
+            </Panel>
+            <Panel title="日志" icon={<Terminal size={18} />} wide>
               <button onClick={() => void refreshLogs()}>
                 <RefreshCcw size={16} />
                 刷新日志
               </button>
-            </div>
-          </Panel>
-
-          <Panel title="日志" icon={<Terminal size={18} />} wide>
-            <div className="log-view">
-              {logs.length === 0 ? <span>暂无日志</span> : logs.map((line, index) => <pre key={`${line}-${index}`}>{line}</pre>)}
-            </div>
-          </Panel>
-        </section>
+              <div className="log-view tall">
+                {logs.length === 0 ? <span>暂无日志</span> : logs.map((line, index) => <pre key={`${line}-${index}`}>{line}</pre>)}
+              </div>
+            </Panel>
+          </section>
+        )}
 
         {message && <div className="toast">{message}</div>}
       </section>
