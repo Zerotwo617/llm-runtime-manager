@@ -33,11 +33,5 @@ jobs:
       - name: Check Rust backend
         run: cargo check --manifest-path src-tauri/Cargo.toml
 
-      - name: Build Tauri bundle
+      - name: Build Tauri app
         run: npm run tauri:build
-
-      - name: Upload Windows bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: llm-runtime-manager-windows
-          path: src-tauri/target/release/bundle/**
