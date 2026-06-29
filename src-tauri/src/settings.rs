@@ -50,10 +50,10 @@ pub fn save_settings(settings: AppSettings) -> Result<AppSettings, String> {
 }
 
 fn settings_path() -> Result<PathBuf, String> {
-    let base = std::env::var("APPDATA")
-        .map(PathBuf::from)
-        .or_else(|_| std::env::current_dir())
-        .map_err(|error| error.to_string())?;
+    let base = match std::env::var("APPDATA") {
+        Ok(path) => PathBuf::from(path),
+        Err(_) => std::env::current_dir().map_err(|error| error.to_string())?,
+    };
 
     Ok(base
         .join("LLM Runtime Manager")
