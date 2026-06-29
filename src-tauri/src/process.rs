@@ -5,6 +5,12 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 #[derive(Default)]
 pub struct ProcessState {
     child: Mutex<Option<Child>>,
@@ -48,10 +54,16 @@ impl ProcessState {
             logs.push(format!("启动命令：{}", build_command_preview(&parameters)));
         }
 
-        let mut child = Command::new(executable)
+        let mut command = Command::new(executable);
+        command
             .args(args)
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        #[cfg(target_os = "windows")]
+        command.creation_flags(CREATE_NO_WINDOW);
+
+        let mut child = command
             .spawn()
             .map_err(|error| format!("启动失败：{error}"))?;
 

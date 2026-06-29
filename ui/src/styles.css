@@ -24,8 +24,8 @@ body,
 
 body {
   margin: 0;
-  min-width: 1080px;
-  min-height: 720px;
+  min-width: 0;
+  min-height: 100%;
   overflow: hidden;
 }
 
@@ -91,7 +91,7 @@ pre {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 236px minmax(0, 1fr);
+  grid-template-columns: clamp(184px, 18vw, 236px) minmax(0, 1fr);
   height: 100vh;
   overflow: hidden;
   background: #eef2f7;
@@ -199,9 +199,10 @@ nav {
 .workspace {
   position: relative;
   min-width: 0;
+  min-height: 0;
   height: 100vh;
   overflow-y: auto;
-  padding: 24px;
+  padding: clamp(16px, 2vw, 24px);
 }
 
 .topbar {
@@ -408,7 +409,149 @@ nav {
 }
 
 @media (max-width: 1180px) {
+  .split.compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .param-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .sidebar {
+    position: static;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    height: auto;
+    min-height: 0;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid #d8e0ec;
+    padding: 12px 16px;
+  }
+
+  .sidebar-main {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+  }
+
+  .brand-block {
+    grid-template-columns: 36px minmax(112px, 1fr);
+    gap: 10px;
+    min-width: 168px;
+  }
+
+  .brand-logo {
+    width: 36px;
+    height: 36px;
+  }
+
+  .brand {
+    font-size: 14px;
+  }
+
+  .subtitle {
+    display: none;
+  }
+
+  nav {
+    display: flex;
+    gap: 6px;
+    margin-top: 0;
+  }
+
+  .nav-item {
+    justify-content: center;
+    width: auto;
+    min-width: 64px;
+    min-height: 36px;
+    white-space: nowrap;
+  }
+
+  .status {
+    min-width: 120px;
+    margin-left: auto;
+    padding: 8px 10px;
+  }
+
+  .workspace {
+    height: auto;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .grid,
+  .split,
+  .split.compact,
+  .hardware {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .sidebar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .sidebar-main {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .brand-block {
+    min-width: 0;
+  }
+
+  nav {
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .status {
+    margin-left: 0;
+  }
+
+  .path-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .actions button,
+  .topbar .icon-button {
+    flex: 1 1 140px;
+  }
+
+  .param-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 460px) {
+  .workspace {
+    padding: 12px;
+  }
+
+  .panel {
+    padding: 14px;
+  }
+
+  .topbar h1 {
+    font-size: 22px;
+  }
+
+  .param-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
