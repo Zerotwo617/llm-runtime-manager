@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [build-dependencies]
-embed-resource = "3.0"
 tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]

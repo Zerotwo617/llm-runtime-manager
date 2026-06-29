@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 
@@ -28,13 +28,13 @@ describe("desktop shell behavior", () => {
   });
 
   test("embeds the logo as the Windows executable icon", () => {
-    const cargo = readRepoFile("src-tauri/Cargo.toml");
-    const build = readRepoFile("src-tauri/build.rs");
-    const resource = readRepoFile("src-tauri/app-icon.rc");
+    const config = readRepoFile("src-tauri/tauri.conf.json");
 
-    expect(cargo).toContain("embed-resource");
-    expect(build).toContain('embed_resource::compile("app-icon.rc"');
-    expect(resource).toContain('IDI_ICON1 ICON "icons/icon.ico"');
+    expect(config).toContain('"icons/32x32.png"');
+    expect(config).toContain('"icons/128x128.png"');
+    expect(config).toContain('"icons/128x128@2x.png"');
+    expect(config).toContain('"icons/icon.ico"');
+    expect(existsSync(resolve(repoRoot, "src-tauri/icons/icon.ico"))).toBe(true);
   });
 
   test("supports tray restore and first-close hide-or-quit choice", () => {
