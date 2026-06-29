@@ -36,6 +36,12 @@ jobs:
         shell: pwsh
         run: |
           cargo check --manifest-path src-tauri/Cargo.toml 2>&1 | Tee-Object rust-check.log
+          if ($LASTEXITCODE -ne 0) {
+            $tail = (Get-Content rust-check.log -Tail 80) -join "`n"
+            $escaped = $tail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=Rust check failed::$escaped"
+            exit $LASTEXITCODE
+          }
 
       - name: Upload Rust check log
         if: steps.rust-check.outcome == 'failure'
