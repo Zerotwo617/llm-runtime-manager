@@ -29,15 +29,22 @@ describe("desktop shell behavior", () => {
 
   test("embeds the logo as the Windows executable icon", () => {
     const config = readRepoFile("src-tauri/tauri.conf.json");
+    const cargo = readRepoFile("src-tauri/Cargo.toml");
+    const build = readRepoFile("src-tauri/build.rs");
 
     expect(config).toContain('"icons/32x32.png"');
     expect(config).toContain('"icons/128x128.png"');
     expect(config).toContain('"icons/128x128@2x.png"');
     expect(config).toContain('"icons/icon.ico"');
+    expect(cargo).toContain("winresource");
+    expect(build).toContain("WindowsResource");
+    expect(build).toContain(".set_icon(\"icons/icon.ico\")");
+    expect(existsSync(resolve(repoRoot, "src-tauri/icons/16x16.png"))).toBe(true);
+    expect(existsSync(resolve(repoRoot, "src-tauri/icons/48x48.png"))).toBe(true);
     expect(existsSync(resolve(repoRoot, "src-tauri/icons/icon.ico"))).toBe(true);
   });
 
-  test("supports tray restore and first-close hide-or-quit choice", () => {
+  test("supports tray restore and native first-close hide-or-quit choice", () => {
     const main = readRepoFile("src-tauri/src/main.rs");
     const app = readRepoFile("ui/src/App.tsx");
     const types = readRepoFile("ui/src/types.ts");
@@ -47,7 +54,11 @@ describe("desktop shell behavior", () => {
     expect(main).toContain("show_menu_item");
     expect(main).toContain("quit_menu_item");
     expect(app).toContain("onCloseRequested");
-    expect(app).toContain("closePromptOpen");
+    expect(app).toContain("dialogMessage(");
+    expect(app).toContain("隐藏到右下角");
+    expect(app).toContain("关闭软件");
+    expect(app).toContain("取消");
+    expect(app).toContain("handleCloseRequest");
     expect(app).toContain(".hide()");
     expect(types).toContain("closeAction");
     expect(settings).toContain("close_action");

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { open } from "@tauri-apps/plugin-dialog";
+import { message as dialogMessage, open } from "@tauri-apps/plugin-dialog";
 import {
   Cpu,
   FolderPlus,
@@ -96,6 +96,7 @@ export default function App() {
   const [scanStatus, setScanStatus] = useState("未扫描");
   const [closePromptOpen, setClosePromptOpen] = useState(false);
   const logCursorRef = useRef(0);
+  const closeDialogPendingRef = useRef(false);
   const closeActionRef = useRef<CloseAction>(defaultSettings.closeAction);
   const allowCloseRef = useRef(false);
 
@@ -133,18 +134,12 @@ export default function App() {
           return;
         }
 
-        const closeAction = closeActionRef.current;
-        if (closeAction === "quit") {
+        if (closeActionRef.current === "quit") {
           return;
         }
 
         event.preventDefault();
-        if (closeAction === "hideToTray") {
-          await appWindow.hide();
-          return;
-        }
-
-        setClosePromptOpen(true);
+        void handleCloseRequest(appWindow);
       })
       .then((handler) => {
         unlisten = handler;
@@ -308,6 +303,47 @@ export default function App() {
     await appWindow.close();
   }
 
+  async function handleCloseRequest(appWindow = getCurrentWindow()) {
+    if (closeDialogPendingRef.current) {
+      return;
+    }
+
+    const closeAction = closeActionRef.current;
+    if (closeAction === "hideToTray") {
+      await appWindow.hide();
+      return;
+    }
+    if (closeAction === "quit") {
+      allowCloseRef.current = true;
+      await appWindow.close();
+      return;
+    }
+
+    closeDialogPendingRef.current = true;
+    try {
+      const result = await dialogMessage("请选择点击右上角关闭按钮时的处理方式。选择后会记住，可在启动页里改回询问。", {
+        title: "关闭 LlamaCPP Launcher",
+        kind: "info",
+        buttons: {
+          yes: "隐藏到右下角",
+          no: "关闭软件",
+          cancel: "取消",
+        },
+      });
+
+      if (result === "隐藏到右下角" || result === "Yes") {
+        await chooseCloseAction("hideToTray");
+      } else if (result === "关闭软件" || result === "No") {
+        await chooseCloseAction("quit");
+      }
+    } catch (error) {
+      setMessage(String(error));
+      setClosePromptOpen(true);
+    } finally {
+      closeDialogPendingRef.current = false;
+    }
+  }
+
   async function generateRecommendation(): Promise<LaunchRecommendation | null> {
     if (!selectedModel) {
       setMessage("请先选择一个 GGUF 模型。");
@@ -432,6 +468,17 @@ export default function App() {
                   <input value={settings.serverPath} onChange={(event) => setSettings({ ...settings, serverPath: event.target.value })} />
                   <button onClick={() => void pickServer()}>选择</button>
                 </div>
+              </label>
+              <label>
+                关闭按钮行为
+                <select
+                  value={settings.closeAction}
+                  onChange={(event) => setSettings({ ...settings, closeAction: event.target.value as CloseAction })}
+                >
+                  <option value="ask">每次询问</option>
+                  <option value="hideToTray">隐藏到右下角</option>
+                  <option value="quit">关闭软件</option>
+                </select>
               </label>
             </Panel>
 
