@@ -77,3 +77,10 @@ jobs:
       - name: Fail after Tauri build
         if: steps.tauri-build.outcome == 'failure'
         run: exit 1
+
+      - name: Upload Windows executable
+        if: steps.tauri-build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: llm-runtime-manager-windows
+          path: src-tauri/target/release/llm-runtime-manager.exe
