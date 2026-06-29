@@ -32,13 +32,12 @@ describe("desktop shell behavior", () => {
     const cargo = readRepoFile("src-tauri/Cargo.toml");
     const build = readRepoFile("src-tauri/build.rs");
 
+    expect(cargo).not.toContain("winresource");
+    expect(build).not.toContain("WindowsResource");
     expect(config).toContain('"icons/32x32.png"');
     expect(config).toContain('"icons/128x128.png"');
     expect(config).toContain('"icons/128x128@2x.png"');
     expect(config).toContain('"icons/icon.ico"');
-    expect(cargo).toContain("winresource");
-    expect(build).toContain("WindowsResource");
-    expect(build).toContain(".set_icon(\"icons/icon.ico\")");
     expect(existsSync(resolve(repoRoot, "src-tauri/icons/16x16.png"))).toBe(true);
     expect(existsSync(resolve(repoRoot, "src-tauri/icons/48x48.png"))).toBe(true);
     expect(existsSync(resolve(repoRoot, "src-tauri/icons/icon.ico"))).toBe(true);
