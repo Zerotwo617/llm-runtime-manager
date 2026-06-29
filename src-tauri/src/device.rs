@@ -1,8 +1,12 @@
-use serde::Serialize;
-use std::process::Command;
+use serde::{Deserialize, Serialize};
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 use sysinfo::System;
 
-#[derive(Debug, Clone, Serialize)]
+const NVIDIA_SMI_TIMEOUT: Duration = Duration::from_secs(3);
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GpuInfo {
     pub name: String,
@@ -11,7 +15,7 @@ pub struct GpuInfo {
     pub free_vram_mb: Option<u64>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceProfile {
     pub cpu_logical_threads: usize,
@@ -48,13 +52,14 @@ pub fn detect_device_profile() -> DeviceProfile {
 }
 
 fn detect_nvidia_gpus() -> Result<Vec<GpuInfo>, String> {
-    let output = Command::new("nvidia-smi")
+    let output = command_output_with_timeout(
+        Command::new("nvidia-smi")
         .args([
             "--query-gpu=name,memory.total,memory.free",
             "--format=csv,noheader,nounits",
-        ])
-        .output()
-        .map_err(|error| error.to_string())?;
+        ]),
+        NVIDIA_SMI_TIMEOUT,
+    )?;
 
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
@@ -82,4 +87,27 @@ fn detect_nvidia_gpus() -> Result<Vec<GpuInfo>, String> {
         .collect();
 
     Ok(gpus)
+}
+
+fn command_output_with_timeout(command: &mut Command, timeout: Duration) -> Result<std::process::Output, String> {
+    let mut child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| error.to_string())?;
+    let started_at = Instant::now();
+
+    loop {
+        if child.try_wait().map_err(|error| error.to_string())?.is_some() {
+            return child.wait_with_output().map_err(|error| error.to_string());
+        }
+
+        if started_at.elapsed() >= timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("nvidia-smi 检测超时。".to_string());
+        }
+
+        thread::sleep(Duration::from_millis(50));
+    }
 }

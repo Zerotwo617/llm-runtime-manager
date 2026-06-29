@@ -52,4 +52,61 @@ describe("desktop shell behavior", () => {
     expect(types).toContain("closeAction");
     expect(settings).toContain("close_action");
   });
+
+  test("keeps expensive model scanning out of startup", () => {
+    const app = readRepoFile("ui/src/App.tsx");
+    const bootBody = app.match(/async function boot\(\) \{(?<body>[\s\S]*?)\n  \}/)?.groups?.body ?? "";
+
+    expect(bootBody).toContain("load_settings");
+    expect(bootBody).not.toContain("scanModels");
+    expect(app).toContain("scanStatus");
+    expect(app).toContain("isScanning");
+  });
+
+  test("uses searchable capped model pickers instead of rendering every model option", () => {
+    const app = readRepoFile("ui/src/App.tsx");
+
+    expect(app).toContain("modelQuery");
+    expect(app).toContain("visibleLaunchableModels");
+    expect(app).toContain("MODEL_PICKER_LIMIT");
+    expect(app).not.toContain("launchableModels.map((model)");
+  });
+
+  test("polls logs incrementally while the server is running", () => {
+    const app = readRepoFile("ui/src/App.tsx");
+    const main = readRepoFile("src-tauri/src/main.rs");
+    const process = readRepoFile("src-tauri/src/process.rs");
+
+    expect(app).toContain("logCursorRef");
+    expect(app).toContain("get_logs_since");
+    expect(main).toContain("fn get_logs_since");
+    expect(process).toContain("logs_since");
+  });
+
+  test("runs expensive backend commands without blocking the Tauri command handler", () => {
+    const main = readRepoFile("src-tauri/src/main.rs");
+
+    expect(main).toContain("async fn detect_device");
+    expect(main).toContain("async fn scan_models");
+    expect(main).toContain("tauri::async_runtime::spawn_blocking");
+  });
+
+  test("bounds nvidia-smi hardware probing with a timeout", () => {
+    const device = readRepoFile("src-tauri/src/device.rs");
+
+    expect(device).toContain("NVIDIA_SMI_TIMEOUT");
+    expect(device).toContain("try_wait");
+    expect(device).toContain("nvidia-smi 检测超时");
+  });
+
+  test("reuses the detected device profile when generating recommendations", () => {
+    const app = readRepoFile("ui/src/App.tsx");
+    const recommend = readRepoFile("src-tauri/src/recommend.rs");
+    const main = readRepoFile("src-tauri/src/main.rs");
+
+    expect(app).toContain("deviceProfile: device ?? null");
+    expect(recommend).toContain("pub device_profile: Option<DeviceProfile>");
+    expect(main).toContain(".device_profile");
+    expect(main).toContain(".clone()");
+  });
 });

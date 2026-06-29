@@ -16,6 +16,7 @@ pub struct RecommendationRequest {
     pub server_path: String,
     pub model: SelectedModel,
     pub mmproj_path: Option<String>,
+    pub device_profile: Option<DeviceProfile>,
     pub profile: LaunchProfile,
     pub host: String,
     pub port: u16,

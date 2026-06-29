@@ -45,6 +45,9 @@ const profileLabels: Record<LaunchProfile, string> = {
   custom: "自定义",
 };
 
+const MODEL_PICKER_LIMIT = 60;
+const LOG_VIEW_LIMIT = 360;
+
 type SectionId = "launch" | "models" | "hardware" | "logs";
 
 const sections: Array<{ id: SectionId; label: string }> = [
@@ -87,7 +90,12 @@ export default function App() {
   const [status, setStatus] = useState<ProcessStatus>({ running: false, message: "未启动" });
   const [logs, setLogs] = useState<string[]>([]);
   const [message, setMessage] = useState("");
+  const [modelQuery, setModelQuery] = useState("");
+  const [mmprojQuery, setMmprojQuery] = useState("");
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanStatus, setScanStatus] = useState("未扫描");
   const [closePromptOpen, setClosePromptOpen] = useState(false);
+  const logCursorRef = useRef(0);
   const closeActionRef = useRef<CloseAction>(defaultSettings.closeAction);
   const allowCloseRef = useRef(false);
 
@@ -95,8 +103,16 @@ export default function App() {
     () => models.find((model) => model.path === selectedModelPath) ?? null,
     [models, selectedModelPath],
   );
-  const launchableModels = models.filter((model) => !model.isMmproj);
-  const mmprojModels = models.filter((model) => model.isMmproj);
+  const launchableModels = useMemo(() => models.filter((model) => !model.isMmproj), [models]);
+  const mmprojModels = useMemo(() => models.filter((model) => model.isMmproj), [models]);
+  const visibleLaunchableModels = useMemo(
+    () => filterModels(launchableModels, modelQuery).slice(0, MODEL_PICKER_LIMIT),
+    [launchableModels, modelQuery],
+  );
+  const visibleMmprojModels = useMemo(
+    () => filterModels(mmprojModels, mmprojQuery).slice(0, MODEL_PICKER_LIMIT),
+    [mmprojModels, mmprojQuery],
+  );
   const activeCopy = sectionCopy[activeSection];
 
   useEffect(() => {
@@ -168,10 +184,8 @@ export default function App() {
       setSettings({ ...defaultSettings, ...loaded });
       setSelectedModelPath(loaded.lastModelPath ?? "");
       setMmprojPath(loaded.lastMmprojPath ?? "");
-      await refreshDevice();
-      if (loaded.modelDirectories.length > 0) {
-        await scanModels(loaded.modelDirectories);
-      }
+      setScanStatus(loaded.modelDirectories.length > 0 ? "已加载模型目录，点击扫描后刷新模型列表。" : "未添加模型目录");
+      void refreshDevice();
     } catch (error) {
       setMessage(String(error));
     }
@@ -183,13 +197,29 @@ export default function App() {
   }
 
   async function scanModels(directories = settings.modelDirectories) {
-    const raw = await invoke<unknown>("scan_models", { directories });
-    const scanned = normalizeModelFiles(raw);
-    setModels(scanned);
-    const current = scanned.find((model) => model.path === selectedModelPath);
-    const firstModel = scanned.find((model) => !model.isMmproj);
-    if ((!current || current.isMmproj) && firstModel) {
-      setSelectedModelPath(firstModel.path);
+    if (directories.length === 0) {
+      setScanStatus("请先添加模型目录。");
+      setMessage("请先添加模型目录。");
+      return;
+    }
+
+    setIsScanning(true);
+    setScanStatus("正在扫描模型目录...");
+    try {
+      const raw = await invoke<unknown>("scan_models", { directories });
+      const scanned = normalizeModelFiles(raw);
+      setModels(scanned);
+      const current = scanned.find((model) => model.path === selectedModelPath);
+      const firstModel = scanned.find((model) => !model.isMmproj);
+      if ((!current || current.isMmproj) && firstModel) {
+        setSelectedModelPath(firstModel.path);
+      }
+      setScanStatus(`扫描完成：发现 ${scanned.length} 个 GGUF 文件。`);
+    } catch (error) {
+      setScanStatus("扫描失败。");
+      setMessage(String(error));
+    } finally {
+      setIsScanning(false);
     }
   }
 
@@ -211,7 +241,7 @@ export default function App() {
     const directories = Array.from(new Set([...settings.modelDirectories, selected]));
     const next = { ...settings, modelDirectories: directories };
     setSettings(next);
-    await scanModels(directories);
+    setScanStatus("已添加模型目录，点击扫描后刷新模型列表。");
   }
 
   async function pickModelFile() {
@@ -231,6 +261,7 @@ export default function App() {
     } else {
       setSelectedModelPath(directModel.path);
     }
+    setScanStatus(`已直接添加：${directModel.name}`);
   }
 
   async function pickMmprojFile() {
@@ -296,6 +327,7 @@ export default function App() {
         isMmproj: selectedModel.isMmproj,
       },
       mmprojPath: mmprojPath || null,
+      deviceProfile: device ?? null,
       profile: settings.profile,
       host: settings.host,
       port: settings.port,
@@ -318,7 +350,8 @@ export default function App() {
     const result = await invoke<ProcessStatus>("start_server", { parameters });
     setStatus(result);
     await saveCurrentSettings();
-    await refreshLogs();
+    logCursorRef.current = 0;
+    await refreshLogs(true);
   }
 
   async function stopServer() {
@@ -332,9 +365,17 @@ export default function App() {
     setStatus(result);
   }
 
-  async function refreshLogs() {
-    const result = await invoke<string[]>("get_logs");
-    setLogs(result);
+  async function refreshLogs(reset = false) {
+    if (reset) {
+      logCursorRef.current = 0;
+      setLogs([]);
+    }
+    const result = await invoke<{ lines: string[]; nextCursor: number }>("get_logs_since", { cursor: logCursorRef.current });
+    logCursorRef.current = result.nextCursor;
+    if (result.lines.length === 0) {
+      return;
+    }
+    setLogs((current) => [...current, ...result.lines].slice(-LOG_VIEW_LIMIT));
   }
 
   function updateParam<K extends keyof LaunchParameters>(key: K, value: LaunchParameters[K]) {
@@ -479,11 +520,12 @@ export default function App() {
                   添加模型目录
                 </button>
                 <button onClick={() => void pickModelFile()}>直接选模型</button>
-                <button onClick={() => void scanModels()}>
+                <button disabled={isScanning} onClick={() => void scanModels()}>
                   <RefreshCcw size={16} />
-                  扫描
+                  {isScanning ? "扫描中" : "扫描"}
                 </button>
               </div>
+              <p className="muted">{scanStatus}</p>
               <div className="directory-list">
                 {settings.modelDirectories.length === 0 ? (
                   <span>尚未添加模型目录</span>
@@ -497,27 +539,38 @@ export default function App() {
 
             <Panel title="模型选择" icon={<Gauge size={18} />} wide>
               <div className="split">
-                <label>
-                  主模型
-                  <select value={selectedModelPath} onChange={(event) => setSelectedModelPath(event.target.value)}>
-                    <option value="">请选择模型</option>
-                    {launchableModels.map((model) => (
-                      <option key={model.path} value={model.path}>
-                        {model.name} ({model.sizeMb || "未知"} MB)
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <ModelPicker
+                  label="主模型"
+                  query={modelQuery}
+                  onQueryChange={setModelQuery}
+                  models={visibleLaunchableModels}
+                  totalCount={launchableModels.length}
+                  selectedPath={selectedModelPath}
+                  onSelect={setSelectedModelPath}
+                  emptyLabel="未找到主模型"
+                />
                 <label>
                   mmproj
-                  <div className="path-row">
-                    <select value={mmprojPath} onChange={(event) => setMmprojPath(event.target.value)}>
-                      <option value="">不使用</option>
-                      {mmprojModels.map((model) => (
-                        <option key={model.path} value={model.path}>{model.name}</option>
-                      ))}
-                    </select>
-                    <button onClick={() => void pickMmprojFile()}>选择</button>
+                  <div className="picker-shell">
+                    <div className="path-row">
+                      <input
+                        value={mmprojQuery}
+                        onChange={(event) => setMmprojQuery(event.target.value)}
+                        placeholder="搜索 mmproj"
+                      />
+                      <button onClick={() => void pickMmprojFile()}>选择</button>
+                    </div>
+                    <button className={mmprojPath === "" ? "model-option active" : "model-option"} onClick={() => setMmprojPath("")}>
+                      <span>不使用 mmproj</span>
+                      <small>纯文本模型或暂不启用多模态</small>
+                    </button>
+                    <ModelOptionList
+                      models={visibleMmprojModels}
+                      totalCount={mmprojModels.length}
+                      selectedPath={mmprojPath}
+                      onSelect={setMmprojPath}
+                      emptyLabel="未找到 mmproj"
+                    />
                   </div>
                 </label>
               </div>
@@ -638,6 +691,85 @@ function NumberField({ label, value, onChange }: { label: string; value: number;
       <input type="number" value={value} onChange={(event) => onChange(Number(event.target.value))} />
     </label>
   );
+}
+
+function ModelPicker({
+  label,
+  query,
+  onQueryChange,
+  models,
+  totalCount,
+  selectedPath,
+  onSelect,
+  emptyLabel,
+}: {
+  label: string;
+  query: string;
+  onQueryChange: (value: string) => void;
+  models: ModelFile[];
+  totalCount: number;
+  selectedPath: string;
+  onSelect: (path: string) => void;
+  emptyLabel: string;
+}) {
+  return (
+    <label>
+      {label}
+      <div className="picker-shell">
+        <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder={`搜索${label}`} />
+        <ModelOptionList
+          models={models}
+          totalCount={totalCount}
+          selectedPath={selectedPath}
+          onSelect={onSelect}
+          emptyLabel={emptyLabel}
+        />
+      </div>
+    </label>
+  );
+}
+
+function ModelOptionList({
+  models,
+  totalCount,
+  selectedPath,
+  onSelect,
+  emptyLabel,
+}: {
+  models: ModelFile[];
+  totalCount: number;
+  selectedPath: string;
+  onSelect: (path: string) => void;
+  emptyLabel: string;
+}) {
+  if (models.length === 0) {
+    return <div className="picker-empty">{emptyLabel}</div>;
+  }
+
+  return (
+    <div className="model-option-list">
+      {models.map((model) => (
+        <button
+          key={model.path}
+          className={model.path === selectedPath ? "model-option active" : "model-option"}
+          onClick={() => onSelect(model.path)}
+        >
+          <span>{model.name}</span>
+          <small>{model.sizeMb ? `${model.sizeMb} MB` : "大小未知"} · {model.directory}</small>
+        </button>
+      ))}
+      {totalCount > models.length && <div className="picker-empty">仅显示前 {models.length} 个结果，请继续输入关键词缩小范围。</div>}
+    </div>
+  );
+}
+
+function filterModels(models: ModelFile[], query: string) {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) {
+    return models;
+  }
+
+  return models.filter((model) => `${model.name} ${model.path}`.toLowerCase().includes(normalizedQuery));
 }
 
 function formatGb(mb: number) {

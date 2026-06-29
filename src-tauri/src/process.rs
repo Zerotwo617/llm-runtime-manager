@@ -14,7 +14,13 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 #[derive(Default)]
 pub struct ProcessState {
     child: Mutex<Option<Child>>,
-    logs: Arc<Mutex<Vec<String>>>,
+    logs: Arc<Mutex<LogBuffer>>,
+}
+
+#[derive(Default)]
+struct LogBuffer {
+    offset: usize,
+    lines: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -23,6 +29,13 @@ pub struct ProcessStatus {
     pub running: bool,
     pub command: Option<String>,
     pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogBatch {
+    pub lines: Vec<String>,
+    pub next_cursor: usize,
 }
 
 impl ProcessState {
@@ -50,8 +63,10 @@ impl ProcessState {
 
         {
             let mut logs = self.logs.lock().map_err(|error| error.to_string())?;
-            logs.clear();
-            logs.push(format!("启动命令：{}", build_command_preview(&parameters)));
+            logs.offset = 0;
+            logs.lines.clear();
+            logs.lines
+                .push(format!("启动命令：{}", build_command_preview(&parameters)));
         }
 
         let mut command = Command::new(executable);
@@ -133,20 +148,33 @@ impl ProcessState {
     pub fn logs(&self) -> Result<Vec<String>, String> {
         self.logs
             .lock()
-            .map(|logs| logs.clone())
+            .map(|logs| logs.lines.clone())
             .map_err(|error| error.to_string())
+    }
+
+    pub fn logs_since(&self, cursor: usize) -> Result<LogBatch, String> {
+        let logs = self.logs.lock().map_err(|error| error.to_string())?;
+        let start_cursor = cursor.max(logs.offset);
+        let start_index = start_cursor.saturating_sub(logs.offset).min(logs.lines.len());
+        let next_cursor = logs.offset + logs.lines.len();
+
+        Ok(LogBatch {
+            lines: logs.lines[start_index..].to_vec(),
+            next_cursor,
+        })
     }
 
     fn push_log(&self, message: &str) -> Result<(), String> {
         self.logs
             .lock()
             .map_err(|error| error.to_string())?
+            .lines
             .push(message.to_string());
         Ok(())
     }
 }
 
-fn spawn_log_reader<R>(label: &'static str, reader: R, logs: Arc<Mutex<Vec<String>>>)
+fn spawn_log_reader<R>(label: &'static str, reader: R, logs: Arc<Mutex<LogBuffer>>)
 where
     R: std::io::Read + Send + 'static,
 {
@@ -154,9 +182,11 @@ where
         let reader = BufReader::new(reader);
         for line in reader.lines().map_while(Result::ok) {
             if let Ok(mut logs) = logs.lock() {
-                logs.push(format!("[{label}] {line}"));
-                if logs.len() > 1000 {
-                    logs.drain(0..200);
+                logs.lines.push(format!("[{label}] {line}"));
+                if logs.lines.len() > 1000 {
+                    let removed = 200.min(logs.lines.len());
+                    logs.lines.drain(0..removed);
+                    logs.offset += removed;
                 }
             }
         }

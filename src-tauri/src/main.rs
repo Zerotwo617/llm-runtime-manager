@@ -8,7 +8,7 @@ mod settings;
 
 use device::DeviceProfile;
 use models::ModelFile;
-use process::{ProcessState, ProcessStatus};
+use process::{LogBatch, ProcessState, ProcessStatus};
 use recommend::{LaunchParameters, LaunchRecommendation, RecommendationRequest};
 use settings::AppSettings;
 use tauri::{
@@ -28,24 +28,37 @@ fn save_settings(settings: AppSettings) -> Result<AppSettings, String> {
 }
 
 #[tauri::command]
-fn detect_device() -> Result<DeviceProfile, String> {
-    Ok(device::detect_device_profile())
+async fn detect_device() -> Result<DeviceProfile, String> {
+    tauri::async_runtime::spawn_blocking(device::detect_device_profile)
+        .await
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
-fn scan_models(directories: Vec<String>) -> Result<Vec<ModelFile>, String> {
-    models::scan_model_directories(directories)
+async fn scan_models(directories: Vec<String>) -> Result<Vec<ModelFile>, String> {
+    tauri::async_runtime::spawn_blocking(move || models::scan_model_directories(directories))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-fn inspect_model_file(path: String) -> Result<ModelFile, String> {
-    models::inspect_model_file(path)
+async fn inspect_model_file(path: String) -> Result<ModelFile, String> {
+    tauri::async_runtime::spawn_blocking(move || models::inspect_model_file(path))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-fn recommend_launch(request: RecommendationRequest) -> Result<LaunchRecommendation, String> {
-    let device = device::detect_device_profile();
-    Ok(recommend::recommend_launch(&device, request))
+async fn recommend_launch(request: RecommendationRequest) -> Result<LaunchRecommendation, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let device = request
+            .device_profile
+            .clone()
+            .unwrap_or_else(device::detect_device_profile);
+        recommend::recommend_launch(&device, request)
+    })
+    .await
+    .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -74,6 +87,11 @@ fn process_status(process_state: State<ProcessState>) -> Result<ProcessStatus, S
 #[tauri::command]
 fn get_logs(process_state: State<ProcessState>) -> Result<Vec<String>, String> {
     process_state.logs()
+}
+
+#[tauri::command]
+fn get_logs_since(process_state: State<ProcessState>, cursor: usize) -> Result<LogBatch, String> {
+    process_state.logs_since(cursor)
 }
 
 fn show_main_window(app: &tauri::AppHandle) {
@@ -136,7 +154,8 @@ fn main() {
             start_server,
             stop_server,
             process_status,
-            get_logs
+            get_logs,
+            get_logs_since
         ])
         .run(tauri::generate_context!())
         .expect("failed to run LLM Runtime Manager");

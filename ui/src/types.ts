@@ -46,6 +46,7 @@ export interface RecommendationRequest {
   serverPath: string;
   model: SelectedModel;
   mmprojPath?: string | null;
+  deviceProfile?: DeviceProfile | null;
   profile: LaunchProfile;
   host: string;
   port: number;
