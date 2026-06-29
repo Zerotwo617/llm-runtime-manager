@@ -1,6 +1,10 @@
 # Dependencies
 node_modules/
 
+# Frontend build output
+dist/
+ui/dist/
+
 # Rust build output
 target/
 src-tauri/target/
@@ -26,6 +30,10 @@ pnpm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local worktrees
+.worktrees/
+worktrees/
 
 # Package manager caches
 .npm/
