@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   Cpu,
@@ -11,11 +12,12 @@ import {
   Square,
   Terminal,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { normalizeDeviceProfile, normalizeModelFile, normalizeModelFiles } from "./api";
 import logoUrl from "./assets/logo.png";
 import type {
   AppSettings,
+  CloseAction,
   DeviceProfile,
   LaunchParameters,
   LaunchProfile,
@@ -33,6 +35,7 @@ const defaultSettings: AppSettings = {
   profile: "model_limit",
   host: "0.0.0.0",
   port: 8080,
+  closeAction: "ask",
 };
 
 const profileLabels: Record<LaunchProfile, string> = {
@@ -84,6 +87,9 @@ export default function App() {
   const [status, setStatus] = useState<ProcessStatus>({ running: false, message: "未启动" });
   const [logs, setLogs] = useState<string[]>([]);
   const [message, setMessage] = useState("");
+  const [closePromptOpen, setClosePromptOpen] = useState(false);
+  const closeActionRef = useRef<CloseAction>(defaultSettings.closeAction);
+  const allowCloseRef = useRef(false);
 
   const selectedModel = useMemo(
     () => models.find((model) => model.path === selectedModelPath) ?? null,
@@ -95,6 +101,43 @@ export default function App() {
 
   useEffect(() => {
     void boot();
+  }, []);
+
+  useEffect(() => {
+    closeActionRef.current = settings.closeAction;
+  }, [settings.closeAction]);
+
+  useEffect(() => {
+    const appWindow = getCurrentWindow();
+    let unlisten: (() => void) | undefined;
+
+    appWindow
+      .onCloseRequested(async (event) => {
+        if (allowCloseRef.current) {
+          return;
+        }
+
+        const closeAction = closeActionRef.current;
+        if (closeAction === "quit") {
+          return;
+        }
+
+        event.preventDefault();
+        if (closeAction === "hideToTray") {
+          await appWindow.hide();
+          return;
+        }
+
+        setClosePromptOpen(true);
+      })
+      .then((handler) => {
+        unlisten = handler;
+      })
+      .catch((error) => setMessage(String(error)));
+
+    return () => {
+      unlisten?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -203,7 +246,7 @@ export default function App() {
     }
   }
 
-  async function saveCurrentSettings(nextSettings = settings) {
+  async function saveCurrentSettings(nextSettings = settings, notify = true) {
     const saved = await invoke<AppSettings>("save_settings", {
       settings: {
         ...nextSettings,
@@ -212,7 +255,26 @@ export default function App() {
       },
     });
     setSettings(saved);
-    setMessage("设置已保存。");
+    if (notify) {
+      setMessage("设置已保存。");
+    }
+  }
+
+  async function chooseCloseAction(closeAction: CloseAction) {
+    const nextSettings = { ...settings, closeAction };
+    closeActionRef.current = closeAction;
+    setSettings(nextSettings);
+    await saveCurrentSettings(nextSettings, false);
+    setClosePromptOpen(false);
+
+    const appWindow = getCurrentWindow();
+    if (closeAction === "hideToTray") {
+      await appWindow.hide();
+      return;
+    }
+
+    allowCloseRef.current = true;
+    await appWindow.close();
   }
 
   async function generateRecommendation(): Promise<LaunchRecommendation | null> {
@@ -526,6 +588,21 @@ export default function App() {
         )}
 
         {message && <div className="toast">{message}</div>}
+        {closePromptOpen && (
+          <div className="modal-backdrop" role="dialog" aria-modal="true">
+            <section className="close-dialog">
+              <h2>关闭 LlamaCPP Launcher</h2>
+              <p>选择后会记住，下次点击关闭会直接按这个方式处理。</p>
+              <div className="close-actions">
+                <button className="primary" onClick={() => void chooseCloseAction("hideToTray")}>
+                  隐藏到右下角
+                </button>
+                <button onClick={() => void chooseCloseAction("quit")}>关闭软件</button>
+                <button onClick={() => setClosePromptOpen(false)}>取消</button>
+              </div>
+            </section>
+          </div>
+        )}
       </section>
     </main>
   );

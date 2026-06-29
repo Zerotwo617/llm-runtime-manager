@@ -1,4 +1,5 @@
 export type LaunchProfile = "model_limit" | "balanced" | "conservative" | "custom";
+export type CloseAction = "ask" | "hideToTray" | "quit";
 
 export interface AppSettings {
   serverPath: string;
@@ -8,6 +9,7 @@ export interface AppSettings {
   profile: LaunchProfile;
   host: string;
   port: number;
+  closeAction: CloseAction;
 }
 
 export interface GpuInfo {

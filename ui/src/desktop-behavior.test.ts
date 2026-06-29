@@ -26,4 +26,30 @@ describe("desktop shell behavior", () => {
     expect(process).toContain("CREATE_NO_WINDOW");
     expect(process).toContain(".creation_flags(CREATE_NO_WINDOW)");
   });
+
+  test("embeds the logo as the Windows executable icon", () => {
+    const cargo = readRepoFile("src-tauri/Cargo.toml");
+    const build = readRepoFile("src-tauri/build.rs");
+    const resource = readRepoFile("src-tauri/app-icon.rc");
+
+    expect(cargo).toContain("embed-resource");
+    expect(build).toContain('embed_resource::compile("app-icon.rc"');
+    expect(resource).toContain('IDI_ICON1 ICON "icons/icon.ico"');
+  });
+
+  test("supports tray restore and first-close hide-or-quit choice", () => {
+    const main = readRepoFile("src-tauri/src/main.rs");
+    const app = readRepoFile("ui/src/App.tsx");
+    const types = readRepoFile("ui/src/types.ts");
+    const settings = readRepoFile("src-tauri/src/settings.rs");
+
+    expect(main).toContain("TrayIconBuilder");
+    expect(main).toContain("show_menu_item");
+    expect(main).toContain("quit_menu_item");
+    expect(app).toContain("onCloseRequested");
+    expect(app).toContain("closePromptOpen");
+    expect(app).toContain(".hide()");
+    expect(types).toContain("closeAction");
+    expect(settings).toContain("close_action");
+  });
 });

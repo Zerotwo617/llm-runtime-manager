@@ -12,6 +12,8 @@ pub struct AppSettings {
     pub profile: String,
     pub host: String,
     pub port: u16,
+    #[serde(default = "default_close_action")]
+    pub close_action: String,
 }
 
 impl Default for AppSettings {
@@ -24,8 +26,13 @@ impl Default for AppSettings {
             profile: "model_limit".to_string(),
             host: "0.0.0.0".to_string(),
             port: 8080,
+            close_action: default_close_action(),
         }
     }
+}
+
+fn default_close_action() -> String {
+    "ask".to_string()
 }
 
 pub fn load_settings() -> Result<AppSettings, String> {
