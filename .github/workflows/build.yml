@@ -31,14 +31,22 @@ jobs:
         run: npm run build
 
       - name: Check Rust backend
+        id: rust-check
+        continue-on-error: true
         shell: pwsh
         run: |
           cargo check --manifest-path src-tauri/Cargo.toml 2>&1 | Tee-Object rust-check.log
-          if ($LASTEXITCODE -ne 0) {
-            "## Rust check failed" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-            Get-Content rust-check.log -Tail 120 | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-            exit $LASTEXITCODE
-          }
+
+      - name: Upload Rust check log
+        if: steps.rust-check.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-check-log
+          path: rust-check.log
+
+      - name: Fail after Rust check
+        if: steps.rust-check.outcome == 'failure'
+        run: exit 1
 
       - name: Build Tauri app
         run: npm run tauri:build
