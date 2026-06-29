@@ -76,6 +76,27 @@ const sectionCopy: Record<SectionId, { title: string; description: string }> = {
   },
 };
 
+const parameterReference = [
+  { flag: "-m", name: "主模型", description: "要加载的 GGUF 主模型文件。" },
+  { flag: "--mmproj", name: "多模态投影", description: "视觉/多模态模型使用的 mmproj GGUF 文件。" },
+  { flag: "--image-min-tokens", name: "图片 token", description: "图片输入至少预留的 token 数，通常只在启用 mmproj 时使用。" },
+  { flag: "-ngl", name: "GPU Layers", description: "卸载到 GPU 的模型层数；999 表示尽量全交给 llama.cpp 自动封顶。" },
+  { flag: "--n-cpu-moe", name: "CPU MoE", description: "MoE 模型可指定留给 CPU 的专家层数量，用来降低显存压力。" },
+  { flag: "--flash-attn", name: "Flash Attention", description: "开启更高效的注意力计算，支持时通常更省显存。" },
+  { flag: "--jinja", name: "聊天模板", description: "启用 GGUF 内置 chat template/Jinja 模板渲染。" },
+  { flag: "-c", name: "Context", description: "上下文窗口 token 数，决定能吃多长上下文，也是显存/内存大头。" },
+  { flag: "-t", name: "Threads", description: "推理阶段 CPU 线程数。" },
+  { flag: "-tb", name: "Threads Batch", description: "prompt/batch 处理阶段 CPU 线程数。" },
+  { flag: "-b", name: "Batch", description: "逻辑批大小，影响吞吐和显存峰值。" },
+  { flag: "-ub", name: "UBatch", description: "物理 micro-batch 大小，用来控制显存峰值。" },
+  { flag: "--cache-type-k/v", name: "KV cache", description: "K/V 缓存精度；q4_0 更省显存，f16 更保守。" },
+  { flag: "--no-mmap", name: "禁用 mmap", description: "不把模型文件映射到内存，部分机器上更稳定。" },
+  { flag: "--mlock", name: "锁定内存", description: "尝试防止模型内存被换出，内存充足时更适合。" },
+  { flag: "-np", name: "Parallel", description: "并行序列/请求数量，本地单用户通常为 1。" },
+  { flag: "--host", name: "监听地址", description: "0.0.0.0 允许局域网访问，127.0.0.1 仅本机访问。" },
+  { flag: "--port", name: "端口", description: "llama-server HTTP 服务端口。" },
+];
+
 export default function App() {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [activeSection, setActiveSection] = useState<SectionId>("launch");
@@ -518,12 +539,96 @@ export default function App() {
 
               {editableParams && (
                 <div className="param-grid">
-                  <NumberField label="Context" value={editableParams.contextSize} onChange={(value) => updateParam("contextSize", value)} />
-                  <NumberField label="GPU Layers" value={editableParams.gpuLayers} onChange={(value) => updateParam("gpuLayers", value)} />
-                  <NumberField label="Threads" value={editableParams.threads} onChange={(value) => updateParam("threads", value)} />
-                  <NumberField label="Batch" value={editableParams.batchSize} onChange={(value) => updateParam("batchSize", value)} />
-                  <NumberField label="UBatch" value={editableParams.ubatchSize} onChange={(value) => updateParam("ubatchSize", value)} />
-                  <NumberField label="Parallel" value={editableParams.parallel} onChange={(value) => updateParam("parallel", value)} />
+                  <NumberField
+                    label="Context"
+                    value={editableParams.contextSize}
+                    description="对应 -c，控制上下文窗口 tokens 数，越大越吃显存和内存。"
+                    onChange={(value) => updateParam("contextSize", value)}
+                  />
+                  <NumberField
+                    label="GPU Layers"
+                    value={editableParams.gpuLayers}
+                    description="对应 -ngl，控制卸载到 GPU 的层数；999 通常表示让 llama.cpp 自动按模型层数封顶。"
+                    onChange={(value) => updateParam("gpuLayers", value)}
+                  />
+                  <NumberField
+                    label="Threads"
+                    value={editableParams.threads}
+                    description="对应 -t，控制推理阶段 CPU 线程数，通常略低于逻辑线程数给系统留余量。"
+                    onChange={(value) => updateParam("threads", value)}
+                  />
+                  <NumberField
+                    label="Threads Batch"
+                    value={editableParams.threadsBatch}
+                    description="对应 -tb，控制 prompt/batch 处理线程数，可高于普通推理线程。"
+                    onChange={(value) => updateParam("threadsBatch", value)}
+                  />
+                  <NumberField
+                    label="Batch"
+                    value={editableParams.batchSize}
+                    description="对应 -b，控制一次处理的 token 批量，越大吞吐可能越高但显存压力更大。"
+                    onChange={(value) => updateParam("batchSize", value)}
+                  />
+                  <NumberField
+                    label="UBatch"
+                    value={editableParams.ubatchSize}
+                    description="对应 -ub，控制 micro-batch，常用于降低峰值显存压力。"
+                    onChange={(value) => updateParam("ubatchSize", value)}
+                  />
+                  <OptionalNumberField
+                    label="Image Tokens"
+                    value={editableParams.imageMinTokens}
+                    description="对应 --image-min-tokens，多模态 mmproj 输入图片时预留的最小 image token 数。"
+                    onChange={(value) => updateParam("imageMinTokens", value)}
+                  />
+                  <OptionalNumberField
+                    label="CPU MoE"
+                    value={editableParams.cpuMoe}
+                    description="对应 --n-cpu-moe，MoE 模型可把部分专家层留给 CPU，平衡显存占用。"
+                    onChange={(value) => updateParam("cpuMoe", value)}
+                  />
+                  <NumberField
+                    label="Parallel"
+                    value={editableParams.parallel}
+                    description="对应 -np，并行请求/序列数；单用户本地启动通常保持 1。"
+                    onChange={(value) => updateParam("parallel", value)}
+                  />
+                  <CacheField
+                    label="Cache K"
+                    value={editableParams.cacheTypeK}
+                    description="对应 --cache-type-k，KV cache 的 K 缓存类型；q4_0 更省显存，f16 更保守。"
+                    onChange={(value) => updateParam("cacheTypeK", value)}
+                  />
+                  <CacheField
+                    label="Cache V"
+                    value={editableParams.cacheTypeV}
+                    description="对应 --cache-type-v，KV cache 的 V 缓存类型；大上下文常用 q4_0 降低占用。"
+                    onChange={(value) => updateParam("cacheTypeV", value)}
+                  />
+                  <ToggleField
+                    label="Flash Attention"
+                    checked={editableParams.flashAttn}
+                    description="对应 --flash-attn on，支持时可降低显存占用并提升注意力计算效率。"
+                    onChange={(value) => updateParam("flashAttn", value)}
+                  />
+                  <ToggleField
+                    label="Jinja"
+                    checked={editableParams.jinja}
+                    description="对应 --jinja，启用模型聊天模板渲染，适合带 chat template 的 GGUF。"
+                    onChange={(value) => updateParam("jinja", value)}
+                  />
+                  <ToggleField
+                    label="No mmap"
+                    checked={editableParams.noMmap}
+                    description="对应 --no-mmap，禁用把模型文件映射到内存，可能更稳定但启动/内存行为不同。"
+                    onChange={(value) => updateParam("noMmap", value)}
+                  />
+                  <ToggleField
+                    label="Mlock"
+                    checked={editableParams.mlock}
+                    description="对应 --mlock，尝试锁定模型内存，减少换页；内存不足时不建议开启。"
+                    onChange={(value) => updateParam("mlock", value)}
+                  />
                 </div>
               )}
 
@@ -534,6 +639,19 @@ export default function App() {
                   ))}
                 </div>
               )}
+
+              <div className="parameter-reference">
+                <h3>参数说明</h3>
+                <div>
+                  {parameterReference.map((item) => (
+                    <article key={item.flag}>
+                      <code>{item.flag}</code>
+                      <strong>{item.name}</strong>
+                      <span>{item.description}</span>
+                    </article>
+                  ))}
+                </div>
+              </div>
             </Panel>
 
             <Panel title="命令与运行" icon={<Play size={18} />} wide>
@@ -731,11 +849,94 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+function NumberField({
+  label,
+  value,
+  description,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  description?: string;
+  onChange: (value: number) => void;
+}) {
   return (
     <label>
       {label}
       <input type="number" value={value} onChange={(event) => onChange(Number(event.target.value))} />
+      {description && <span className="param-help">{description}</span>}
+    </label>
+  );
+}
+
+function OptionalNumberField({
+  label,
+  value,
+  description,
+  onChange,
+}: {
+  label: string;
+  value?: number | null;
+  description: string;
+  onChange: (value: number | null) => void;
+}) {
+  return (
+    <label>
+      {label}
+      <input
+        type="number"
+        value={value ?? ""}
+        placeholder="不启用"
+        onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))}
+      />
+      <span className="param-help">{description}</span>
+    </label>
+  );
+}
+
+function CacheField({
+  label,
+  value,
+  description,
+  onChange,
+}: {
+  label: string;
+  value?: string | null;
+  description: string;
+  onChange: (value: string | null) => void;
+}) {
+  return (
+    <label>
+      {label}
+      <select value={value ?? ""} onChange={(event) => onChange(event.target.value || null)}>
+        <option value="">默认</option>
+        <option value="q4_0">q4_0</option>
+        <option value="q8_0">q8_0</option>
+        <option value="f16">f16</option>
+      </select>
+      <span className="param-help">{description}</span>
+    </label>
+  );
+}
+
+function ToggleField({
+  label,
+  checked,
+  description,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  description: string;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <label className="toggle-field">
+      <span className="toggle-row">
+        <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+        <span>{label}</span>
+      </span>
+      <span className="param-help">{description}</span>
     </label>
   );
 }

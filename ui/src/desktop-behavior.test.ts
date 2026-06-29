@@ -119,4 +119,27 @@ describe("desktop shell behavior", () => {
     expect(main).toContain(".device_profile");
     expect(main).toContain(".clone()");
   });
+
+  test("shows editable controls and explanations for the full launch parameter set", () => {
+    const app = readRepoFile("ui/src/App.tsx");
+
+    for (const label of [
+      "Image Tokens",
+      "CPU MoE",
+      "Threads Batch",
+      "Cache K",
+      "Cache V",
+      "Flash Attention",
+      "Jinja",
+      "No mmap",
+      "Mlock",
+    ]) {
+      expect(app).toContain(label);
+    }
+
+    expect(app).toContain("param-help");
+    expect(app).toContain("控制上下文窗口");
+    expect(app).toContain("KV cache");
+    expect(app).toContain("把模型文件映射到内存");
+  });
 });
