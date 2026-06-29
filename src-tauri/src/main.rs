@@ -32,6 +32,11 @@ fn scan_models(directories: Vec<String>) -> Result<Vec<ModelFile>, String> {
 }
 
 #[tauri::command]
+fn inspect_model_file(path: String) -> Result<ModelFile, String> {
+    models::inspect_model_file(path)
+}
+
+#[tauri::command]
 fn recommend_launch(request: RecommendationRequest) -> Result<LaunchRecommendation, String> {
     let device = device::detect_device_profile();
     Ok(recommend::recommend_launch(&device, request))
@@ -74,6 +79,7 @@ fn main() {
             save_settings,
             detect_device,
             scan_models,
+            inspect_model_file,
             recommend_launch,
             build_command,
             start_server,

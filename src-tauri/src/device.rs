@@ -3,6 +3,7 @@ use std::process::Command;
 use sysinfo::System;
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GpuInfo {
     pub name: String,
     pub backend: String,
@@ -11,6 +12,7 @@ pub struct GpuInfo {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeviceProfile {
     pub cpu_logical_threads: usize,
     pub total_ram_mb: u64,

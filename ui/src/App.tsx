@@ -12,6 +12,7 @@ import {
   Terminal,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { normalizeDeviceProfile, normalizeModelFile, normalizeModelFiles } from "./api";
 import type {
   AppSettings,
   DeviceProfile,
@@ -103,18 +104,18 @@ export default function App() {
   }
 
   async function refreshDevice() {
-    const profile = await invoke<DeviceProfile>("detect_device");
-    setDevice(profile);
+    const profile = await invoke<unknown>("detect_device");
+    setDevice(normalizeDeviceProfile(profile));
   }
 
   async function scanModels(directories = settings.modelDirectories) {
-    const scanned = await invoke<ModelFile[]>("scan_models", { directories });
+    const raw = await invoke<unknown>("scan_models", { directories });
+    const scanned = normalizeModelFiles(raw);
     setModels(scanned);
-    if (!selectedModelPath) {
-      const firstModel = scanned.find((model) => !model.isMmproj);
-      if (firstModel) {
-        setSelectedModelPath(firstModel.path);
-      }
+    const current = scanned.find((model) => model.path === selectedModelPath);
+    const firstModel = scanned.find((model) => !model.isMmproj);
+    if ((!current || current.isMmproj) && firstModel) {
+      setSelectedModelPath(firstModel.path);
     }
   }
 
@@ -147,16 +148,15 @@ export default function App() {
     if (typeof selected !== "string") {
       return;
     }
-    const name = selected.split(/[\\/]/).pop() ?? "model.gguf";
-    const directModel: ModelFile = {
-      path: selected,
-      name,
-      directory: selected.replace(/[\\/][^\\/]+$/, ""),
-      sizeMb: 0,
-      isMmproj: name.toLowerCase().includes("mmproj"),
-    };
+    const raw = await invoke<unknown>("inspect_model_file", { path: selected });
+    const directModel = normalizeModelFile(raw);
     setModels((current) => [directModel, ...current.filter((model) => model.path !== selected)]);
-    setSelectedModelPath(selected);
+    if (directModel.isMmproj) {
+      setMmprojPath(directModel.path);
+      setMessage("这个文件是 mmproj，已放到 mmproj 选择框。");
+    } else {
+      setSelectedModelPath(directModel.path);
+    }
   }
 
   async function pickMmprojFile() {
@@ -165,7 +165,10 @@ export default function App() {
       filters: [{ name: "GGUF", extensions: ["gguf"] }],
     });
     if (typeof selected === "string") {
-      setMmprojPath(selected);
+      const raw = await invoke<unknown>("inspect_model_file", { path: selected });
+      const projector = normalizeModelFile(raw);
+      setModels((current) => [projector, ...current.filter((model) => model.path !== selected)]);
+      setMmprojPath(projector.path);
     }
   }
 
@@ -181,10 +184,14 @@ export default function App() {
     setMessage("设置已保存。");
   }
 
-  async function generateRecommendation() {
+  async function generateRecommendation(): Promise<LaunchRecommendation | null> {
     if (!selectedModel) {
       setMessage("请先选择一个 GGUF 模型。");
-      return;
+      return null;
+    }
+    if (selectedModel.isMmproj) {
+      setMessage("当前选中的是 mmproj，请选择主模型 GGUF。");
+      return null;
     }
 
     const request: RecommendationRequest = {
@@ -207,14 +214,15 @@ export default function App() {
     setEditableParams(result.parameters);
     setCommandPreview(result.commandPreview);
     setMessage("已生成推荐参数。");
+    return result;
   }
 
   async function startServer() {
-    if (!editableParams) {
-      await generateRecommendation();
+    const parameters = editableParams ?? (await generateRecommendation())?.parameters;
+    if (!parameters) {
       return;
     }
-    const result = await invoke<ProcessStatus>("start_server", { parameters: editableParams });
+    const result = await invoke<ProcessStatus>("start_server", { parameters });
     setStatus(result);
     await saveCurrentSettings();
     await refreshLogs();
